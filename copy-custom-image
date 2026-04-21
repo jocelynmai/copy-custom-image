@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Processor Pro</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            --primary-color: #ffffff;
+            --secondary-color: #eef2f5;
+            --text-color: #1a202c;
+            --accent-color: #3a7cfd;
+            --border-color: #dcdfe6;
+            --icon-color: #4db6ac;
+            --danger-color: #e53e3e;
+            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .main-container {
+            display: flex;
+            height: 100%;
+        }
+        .left-panel {
+            width: 450px;
+            padding: 25px;
+            background-color: var(--primary-color);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            border-right: 1px solid var(--border-color);
+        }
+        .right-panel {
+            flex-grow: 1;
+            padding: 25px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        h1, h2 {
+            margin: 0;
+            padding: 0;
+            font-weight: 700;
+        }
+        h1 { font-size: 1.8em; }
+        h2 { font-size: 1.4em; color: #4a5568;}
+
+        /* Left Panel */
+        .upload-zone {
+            flex-grow: 1;
+            background-color: var(--secondary-color);
+            border: 3px dashed var(--border-color);
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 20px;
+            transition: background-color 0.3s, border-color 0.3s;
+            cursor: pointer;
+        }
+        .upload-zone.dragover {
+            background-color: #e2e8f0;
+            border-color: var(--accent-color);
+        }
+        .upload-zone .icon { font-size: 5rem; margin-bottom: 15px; color: #a0aec0;}
+        .upload-zone p { font-size: 1.1em; color: #718096; margin: 5px 0;}
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        label { font-weight: bold; font-size: 1.1em; }
+        #slug-input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-size: 1em;
+            box-sizing: border-box;
+        }
+        #slug-input:focus { outline: none; border-color: var(--accent-color); }
+
+        .action-button, .secondary-button {
+            border: none; padding: 14px 20px; border-radius: 8px; font-size: 1.1em; font-weight: 600; cursor: pointer;
+            transition: all 0.3s; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .action-button { background-color: var(--accent-color); color: white; }
+        .action-button:hover { background-color: #2b6cb0; }
+        .action-button:disabled { background-color: #a0aec0; cursor: not-allowed; }
+        #spinner { display: none; width: 18px; height: 18px; border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Right Panel */
+        .preview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .secondary-button { background-color: var(--secondary-color); color: var(--text-color); border: 1px solid var(--border-color); }
+        .secondary-button:hover { background-color: #e2e8f0; }
+
+        .image-grid { display: flex; flex-wrap: wrap; gap: 20px; }
+        .placeholder {
+            flex-grow: 1; display: flex; align-items: center; justify-content: center;
+            text-align: center; color: #a0aec0; font-size: 1.2em;
+        }
+
+        /* Preview & Result Cards */
+        .preview-image-container, .result-card {
+            position: relative;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid var(--border-color);
+            background-color: var(--primary-color);
+            box-shadow: var(--shadow);
+        }
+        .preview-image-container { cursor: grab; width: 180px; height: 180px; }
+        .preview-image { width: 100%; height: 100%; object-fit: cover; }
+        .preview-image.dragging { opacity: 0.4; }
+        .remove-btn {
+            position: absolute; top: 8px; right: 8px; background-color: rgba(26, 32, 44, 0.7); color: white;
+            border: none; border-radius: 50%; width: 28px; height: 28px; font-weight: bold; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; font-size: 16px;
+            transition: background-color 0.2s;
+        }
+        .remove-btn:hover { background-color: var(--danger-color); }
+
+        .result-card { width: 240px; }
+        .result-card img { display: block; width: 100%; height: 200px; object-fit: cover; }
+        .result-card-info { padding: 12px; text-align: center; }
+        .result-card-info span { font-size: 0.9em; color: #4a5568; word-break: break-all; }
+        .result-card-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.65);
+            display: flex; align-items: center; justify-content: center;
+            opacity: 0; transition: opacity 0.3s;
+        }
+        .result-card:hover .result-card-overlay { opacity: 1; }
+        .result-card-overlay a {
+            color: white; text-decoration: none; background-color: rgba(255,255,255,0.2);
+            padding: 10px 20px; border-radius: 20px; display: flex; align-items: center; gap: 8px;
+            backdrop-filter: blur(5px);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="main-container">
+        <div class="left-panel">
+            <h1>Image Processor</h1>
+            <div class="upload-zone" id="upload-zone">
+                <div class="icon">✨</div>
+                <h2>Kéo thả hoặc Paste</h2>
+                <p>Click để chọn file hoặc dán ảnh (Ctrl+V) ở bất cứ đâu</p>
+                <input type="file" id="file-input" multiple accept="image/*" hidden>
+            </div>
+            <div class="controls">
+                <div>
+                    <label for="slug-input">Slug (tên file)</label>
+                    <input type="text" id="slug-input" placeholder="ví dụ: san-pham-moi-thang-5">
+                </div>
+                <button id="process-button" class="action-button" disabled>
+                    <span id="spinner"></span>
+                    <span>Bắt đầu xử lý</span>
+                </button>
+            </div>
+        </div>
+        <div class="right-panel" id="right-panel">
+            <div class="preview-header">
+                <h2 id="right-panel-title">Ảnh chờ xử lý</h2>
+                <div id="header-buttons"></div>
+            </div>
+            <div class="image-grid" id="image-grid">
+                <div class="placeholder" id="placeholder-text">
+                    <p>Các ảnh bạn thêm vào sẽ được hiển thị ở đây.<br>Kéo thả để sắp xếp lại vị trí.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const uploadZone = document.getElementById('upload-zone');
+        const fileInput = document.getElementById('file-input');
+        const slugInput = document.getElementById('slug-input');
+        const processButton = document.getElementById('process-button');
+        const spinner = document.getElementById('spinner');
+        const imageGrid = document.getElementById('image-grid');
+        const placeholderText = document.getElementById('placeholder-text');
+        const rightPanelTitle = document.getElementById('right-panel-title');
+        const headerButtonsContainer = document.getElementById('header-buttons');
+
+        // State
+        let imageFiles = [];
+        let processedFiles = [];
+        let draggedItem = null;
+        const TARGET_SIZE_BYTES = 1 * 1024 * 1024; // 1MB
+
+        // --- Event Listeners ---
+        document.addEventListener('paste', handlePaste);
+        uploadZone.addEventListener('click', () => fileInput.click());
+        uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+        uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+        uploadZone.addEventListener('drop', handleDropFile);
+        fileInput.addEventListener('change', (e) => handleFileSelection(e.target.files));
+        slugInput.addEventListener('input', updateProcessButtonState);
+        processButton.addEventListener('click', processAllImages);
+        
+        // --- Input Handling ---
+        function handlePaste(e) {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            const imageBlobs = [];
+            for (const item of items) {
+                if (item.type.includes('image')) {
+                    const blob = item.getAsFile();
+                    if (blob) imageBlobs.push(blob);
+                }
+            }
+            if (imageBlobs.length > 0) {
+                e.preventDefault();
+                addImages(imageBlobs);
+            }
+        }
+        function handleDropFile(e) {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+            if (files.length > 0) addImages(files);
+        }
+        function handleFileSelection(files) {
+            const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+            if (imageFiles.length > 0) addImages(imageFiles);
+            fileInput.value = ''; // Reset for same file selection
+        }
+        function addImages(files) {
+            imageFiles.push(...files);
+            renderInitialPreviews();
+            updateProcessButtonState();
+        }
+
+        // --- UI Rendering ---
+        function updateProcessButtonState() {
+            processButton.disabled = imageFiles.length === 0 || slugInput.value.trim() === '';
+        }
+
+        function renderInitialPreviews() {
+            imageGrid.innerHTML = '';
+            placeholderText.style.display = imageFiles.length > 0 ? 'none' : 'block';
+            imageFiles.forEach((file, index) => {
+                const container = document.createElement('div');
+                container.className = 'preview-image-container';
+                container.dataset.index = index;
+                container.draggable = true;
+                container.innerHTML = `
+                    <img src="${URL.createObjectURL(file)}" class="preview-image" />
+                    <button class="remove-btn">&times;</button>
+                `;
+                container.querySelector('.remove-btn').onclick = (e) => {
+                    e.stopPropagation();
+                    URL.revokeObjectURL(container.querySelector('img').src);
+                    imageFiles.splice(index, 1);
+                    renderInitialPreviews();
+                    updateProcessButtonState();
+                };
+                imageGrid.appendChild(container);
+            });
+            addDragListeners();
+        }
+
+        function addDragListeners() {
+            const items = imageGrid.querySelectorAll('.preview-image-container');
+            items.forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    draggedItem = e.target.closest('.preview-image-container');
+                    setTimeout(() => draggedItem.querySelector('.preview-image').classList.add('dragging'), 0);
+                });
+                item.addEventListener('dragover', (e) => e.preventDefault());
+                item.addEventListener('drop', (e) => {
+                    e.stopPropagation();
+                    const targetItem = e.target.closest('.preview-image-container');
+                    if (draggedItem && targetItem && draggedItem !== targetItem) {
+                        const from = parseInt(draggedItem.dataset.index, 10);
+                        const to = parseInt(targetItem.dataset.index, 10);
+                        const [moved] = imageFiles.splice(from, 1);
+                        imageFiles.splice(to, 0, moved);
+                        renderInitialPreviews();
+                    }
+                });
+                item.addEventListener('dragend', () => {
+                    if (draggedItem) {
+                         draggedItem.querySelector('.preview-image').classList.remove('dragging');
+                         draggedItem = null;
+                    }
+                });
+            });
+        }
+
+        // --- Image Processing ---
+        function generateSlug(text) {
+            return text.toString().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+                .replace(/\s+/g, '-').replace(/[^\w-]+/g, '').replace(/--+/g, '-');
+        }
+
+        async function compressImage(file) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.src = URL.createObjectURL(file);
+                img.onload = async () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    let { width, height } = img;
+                    
+                    canvas.width = width;
+                    canvas.height = height;
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    let blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.92));
+                    if (blob.size <= TARGET_SIZE_BYTES) { URL.revokeObjectURL(img.src); return resolve(blob); }
+                    
+                    blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.8));
+                    if (blob.size <= TARGET_SIZE_BYTES) { URL.revokeObjectURL(img.src); return resolve(blob); }
+
+                    let ratio = 1.0;
+                    while (blob.size > TARGET_SIZE_BYTES && ratio > 0.3) {
+                        ratio -= 0.1;
+                        canvas.width = Math.round(width * ratio);
+                        canvas.height = Math.round(height * ratio);
+                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                        blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.8));
+                    }
+                    URL.revokeObjectURL(img.src);
+                    resolve(blob);
+                };
+                img.onerror = reject;
+            });
+        }
+
+        async function processAllImages() {
+            const slug = generateSlug(slugInput.value);
+            if (!slug) { alert('Vui lòng nhập slug hợp lệ.'); return; }
+
+            // UI feedback for processing start
+            processButton.disabled = true;
+            spinner.style.display = 'block';
+            imageGrid.innerHTML = '<div class="placeholder"><p>Đang xử lý, vui lòng đợi...</p></div>';
+            rightPanelTitle.textContent = "Kết quả đã xử lý";
+            headerButtonsContainer.innerHTML = '';
+
+
+            const processingPromises = imageFiles.map(async (file, index) => {
+                const compressedBlob = await compressImage(file);
+                return {
+                    blob: compressedBlob,
+                    fileName: `${slug}-${index + 1}.jpg`,
+                    previewUrl: URL.createObjectURL(compressedBlob)
+                };
+            });
+
+            try {
+                processedFiles = await Promise.all(processingPromises);
+                displayProcessedImages();
+            } catch (error) {
+                console.error('Lỗi xử lý ảnh:', error);
+                imageGrid.innerHTML = '<div class="placeholder"><p style="color: red;">Đã có lỗi xảy ra.</p></div>';
+            } finally {
+                spinner.style.display = 'none';
+                processButton.querySelector('span:last-child').textContent = 'Bắt đầu xử lý';
+            }
+        }
+        
+        // --- Display & Download Results ---
+        function displayProcessedImages() {
+            imageGrid.innerHTML = '';
+            placeholderText.style.display = 'none';
+            if (processedFiles.length === 0) {
+                imageGrid.innerHTML = '<div class="placeholder"><p>Không có kết quả để hiển thị.</p></div>';
+                return;
+            }
+
+            processedFiles.forEach(({ blob, fileName, previewUrl }) => {
+                const card = document.createElement('div');
+                card.className = 'result-card';
+                card.innerHTML = `
+                    <img src="${previewUrl}" alt="${fileName}" />
+                    <div class="result-card-info"><span>${fileName}</span></div>
+                    <div class="result-card-overlay">
+                        <a href="${previewUrl}" download="${fileName}">
+                           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                           Tải
+                        </a>
+                    </div>
+                `;
+                imageGrid.appendChild(card);
+            });
+            renderHeaderButtons();
+        }
+
+        function renderHeaderButtons() {
+            headerButtonsContainer.innerHTML = `
+                <button id="clear-all-button" class="secondary-button">🗑️ Làm lại từ đầu</button>
+                <button id="download-all-button" class="action-button">📦 Tải tất cả (.zip)</button>
+            `;
+            document.getElementById('clear-all-button').addEventListener('click', clearAll);
+            document.getElementById('download-all-button').addEventListener('click', downloadAllAsZip);
+        }
+
+        function downloadAllAsZip() {
+            const zip = new JSZip();
+            const slug = generateSlug(slugInput.value) || 'images';
+
+            processedFiles.forEach(({ blob, fileName }) => zip.file(fileName, blob));
+
+            zip.generateAsync({ type: 'blob' }).then((content) => {
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(content);
+                link.download = `${slug}.zip`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            });
+        }
+
+        function clearAll() {
+            // Clean up blob URLs to prevent memory leaks
+            imageFiles.forEach(file => URL.revokeObjectURL(URL.createObjectURL(file)));
+            processedFiles.forEach(file => URL.revokeObjectURL(file.previewUrl));
+
+            imageFiles = [];
+            processedFiles = [];
+            
+            slugInput.value = '';
+            imageGrid.innerHTML = '';
+            placeholderText.style.display = 'block';
+            rightPanelTitle.textContent = "Ảnh chờ xử lý";
+            headerButtonsContainer.innerHTML = '';
+
+            updateProcessButtonState();
+        }
+    </script>
+</body>
+</html>
+
